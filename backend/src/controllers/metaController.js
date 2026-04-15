@@ -1,57 +1,42 @@
 import db from "../config/db.js";
 
-export const getAllMembers = (req, res) => {
+export const getAllMembers = async (req, res) => {
   try {
-    db.query("SELECT * FROM members ORDER BY id ASC", (err, results) => {
-      if (err) {
-        console.error("Get members error:", err);
-        return res.status(500).json({
-          success: false,
-          message: "Failed to fetch members",
-        });
-      }
+    const [members] = await db.query(
+      "SELECT * FROM members ORDER BY id ASC"
+    );
 
-      return res.status(200).json({
-        success: true,
-        members: results,
-      });
+    return res.status(200).json({
+      success: true,
+      members,
     });
   } catch (error) {
-    console.error("Get members controller error:", error);
+    console.error("Get all members error:", error);
     return res.status(500).json({
       success: false,
-      message: "Internal server error",
+      message: "Failed to fetch members",
     });
   }
 };
 
-export const getBoardLabels = (req, res) => {
+export const getBoardLabels = async (req, res) => {
   try {
     const { boardId } = req.params;
 
-    db.query(
+    const [labels] = await db.query(
       "SELECT * FROM labels WHERE board_id = ? ORDER BY id ASC",
-      [boardId],
-      (err, results) => {
-        if (err) {
-          console.error("Get board labels error:", err);
-          return res.status(500).json({
-            success: false,
-            message: "Failed to fetch labels",
-          });
-        }
-
-        return res.status(200).json({
-          success: true,
-          labels: results,
-        });
-      }
+      [boardId]
     );
+
+    return res.status(200).json({
+      success: true,
+      labels,
+    });
   } catch (error) {
-    console.error("Get board labels controller error:", error);
+    console.error("Get board labels error:", error);
     return res.status(500).json({
       success: false,
-      message: "Internal server error",
+      message: "Failed to fetch labels",
     });
   }
 };
