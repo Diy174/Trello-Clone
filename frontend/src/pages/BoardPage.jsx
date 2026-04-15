@@ -514,17 +514,24 @@ function BoardPage() {
                     </h2>
                     <div className="flex gap-2">
                       <button
-                        onClick={() => handleEditList(list.id, list.title)}
-                        className="text-sm bg-yellow-400 px-2 py-1 rounded"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDeleteList(list.id)}
-                        className="text-sm bg-red-500 text-white px-2 py-1 rounded"
-                      >
-                        Delete
-                      </button>
+  onClick={(e) => {
+    e.stopPropagation();
+    handleEditList(list.id, list.title);
+  }}
+  className="text-sm bg-yellow-400 px-2 py-1 rounded"
+>
+  Edit
+</button>
+
+<button
+  onClick={(e) => {
+    e.stopPropagation();
+    handleDeleteList(list.id);
+  }}
+  className="text-sm bg-red-500 text-white px-2 py-1 rounded"
+>
+  Delete
+</button>
                     </div>
                   </div>
 
