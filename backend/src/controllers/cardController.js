@@ -223,112 +223,71 @@ export const reorderCards = (req, res) => {
 };
 
 // Get full card details
-export const getCardDetails = (req, res) => {
+export const getCardDetails = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const cardQuery = `SELECT * FROM cards WHERE id = ?`;
-    const labelsQuery = `
-      SELECT l.*
-      FROM labels l
-      INNER JOIN card_labels cl ON l.id = cl.label_id
-      WHERE cl.card_id = ?
-    `;
-    const membersQuery = `
-      SELECT m.*
-      FROM members m
-      INNER JOIN card_members cm ON m.id = cm.member_id
-      WHERE cm.card_id = ?
-    `;
-    const checklistsQuery = `
-      SELECT * FROM checklists
-      WHERE card_id = ?
-      ORDER BY position ASC
-    `;
-    const checklistItemsQuery = `
-      SELECT ci.*
-      FROM checklist_items ci
-      INNER JOIN checklists c ON ci.checklist_id = c.id
-      WHERE c.card_id = ?
-      ORDER BY ci.position ASC
-    `;
+    const [cardRows] = await db.query(
+      "SELECT * FROM cards WHERE id = ?",
+      [id]
+    );
 
-    db.query(cardQuery, [id], (cardErr, cardResults) => {
-      if (cardErr) {
-        console.error("Get card details error:", cardErr);
-        return res.status(500).json({
-          success: false,
-          message: "Failed to fetch card",
-        });
-      }
-
-      if (cardResults.length === 0) {
-        return res.status(404).json({
-          success: false,
-          message: "Card not found",
-        });
-      }
-
-      db.query(labelsQuery, [id], (labelsErr, labelsResults) => {
-        if (labelsErr) {
-          console.error("Get labels error:", labelsErr);
-          return res.status(500).json({
-            success: false,
-            message: "Failed to fetch labels",
-          });
-        }
-
-        db.query(membersQuery, [id], (membersErr, membersResults) => {
-          if (membersErr) {
-            console.error("Get members error:", membersErr);
-            return res.status(500).json({
-              success: false,
-              message: "Failed to fetch members",
-            });
-          }
-
-          db.query(checklistsQuery, [id], (checklistsErr, checklistsResults) => {
-            if (checklistsErr) {
-              console.error("Get checklists error:", checklistsErr);
-              return res.status(500).json({
-                success: false,
-                message: "Failed to fetch checklists",
-              });
-            }
-
-            db.query(checklistItemsQuery, [id], (itemsErr, itemsResults) => {
-              if (itemsErr) {
-                console.error("Get checklist items error:", itemsErr);
-                return res.status(500).json({
-                  success: false,
-                  message: "Failed to fetch checklist items",
-                });
-              }
-
-              const checklistsWithItems = checklistsResults.map((checklist) => ({
-                ...checklist,
-                items: itemsResults.filter(
-                  (item) => item.checklist_id === checklist.id
-                ),
-              }));
-
-              return res.status(200).json({
-                success: true,
-                card: cardResults[0],
-                labels: labelsResults,
-                members: membersResults,
-                checklists: checklistsWithItems,
-              });
-            });
-          });
-        });
+    if (cardRows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Card not found",
       });
+    }
+
+    const [labels] = await db.query(
+      `SELECT l.*
+       FROM labels l
+       INNER JOIN card_labels cl ON l.id = cl.label_id
+       WHERE cl.card_id = ?`,
+      [id]
+    );
+
+    const [members] = await db.query(
+      `SELECT m.*
+       FROM members m
+       INNER JOIN card_members cm ON m.id = cm.member_id
+       WHERE cm.card_id = ?`,
+      [id]
+    );
+
+    const [checklists] = await db.query(
+      `SELECT * FROM checklists
+       WHERE card_id = ?
+       ORDER BY position ASC`,
+      [id]
+    );
+
+    const [items] = await db.query(
+      `SELECT ci.*
+       FROM checklist_items ci
+       INNER JOIN checklists c ON ci.checklist_id = c.id
+       WHERE c.card_id = ?
+       ORDER BY ci.position ASC`,
+      [id]
+    );
+
+    const checklistsWithItems = checklists.map((checklist) => ({
+      ...checklist,
+      items: items.filter((item) => item.checklist_id === checklist.id),
+    }));
+
+    return res.status(200).json({
+      success: true,
+      card: cardRows[0],
+      labels,
+      members,
+      checklists: checklistsWithItems,
     });
   } catch (error) {
-    console.error("Get card details controller error:", error);
+    console.error("Get card details error:", error);
     return res.status(500).json({
       success: false,
-      message: "Internal server error",
+      message: "Failed to fetch card details",
     });
   }
 };

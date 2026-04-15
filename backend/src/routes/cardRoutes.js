@@ -21,7 +21,7 @@ const router = express.Router();
 router.post("/lists/:listId/cards", createCard);
 router.put("/reorder", reorderCards);
 
-router.get("/:id/details", getCardDetails);
+router.get("/:id/details", getCardDetails); 
 router.put("/:id", updateCard);
 router.put("/:id/due-date", updateCardDueDate);
 router.put("/:id/archive", archiveCard);
