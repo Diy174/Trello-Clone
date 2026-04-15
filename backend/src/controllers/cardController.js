@@ -1,7 +1,7 @@
 import db from "../config/db.js";
 
 // Create a new card inside a list
-export const createCard = (req, res) => {
+export const createCard = async (req, res) => {
   try {
     const { listId } = req.params;
     const { title, description } = req.body;
@@ -13,59 +13,37 @@ export const createCard = (req, res) => {
       });
     }
 
-    const positionQuery = `
-      SELECT COALESCE(MAX(position), 0) AS maxPosition
-      FROM cards
-      WHERE list_id = ?
-    `;
+    const [posRows] = await db.query(
+      `SELECT COALESCE(MAX(position), 0) AS maxPosition
+       FROM cards
+       WHERE list_id = ?`,
+      [listId]
+    );
 
-    db.query(positionQuery, [listId], (posErr, posResults) => {
-      if (posErr) {
-        console.error("Error finding card position:", posErr);
-        return res.status(500).json({
-          success: false,
-          message: "Failed to determine card position",
-        });
-      }
+    const nextPosition = posRows[0].maxPosition + 1;
 
-      const nextPosition = posResults[0].maxPosition + 1;
+    const [result] = await db.query(
+      `INSERT INTO cards (list_id, title, description, position)
+       VALUES (?, ?, ?, ?)`,
+      [listId, title, description || "", nextPosition]
+    );
 
-      const insertQuery = `
-        INSERT INTO cards (list_id, title, description, position)
-        VALUES (?, ?, ?, ?)
-      `;
-
-      db.query(
-        insertQuery,
-        [listId, title, description || "", nextPosition],
-        (err, result) => {
-          if (err) {
-            console.error("Create card error:", err);
-            return res.status(500).json({
-              success: false,
-              message: "Failed to create card",
-            });
-          }
-
-          return res.status(201).json({
-            success: true,
-            message: "Card created successfully",
-            cardId: result.insertId,
-          });
-        }
-      );
+    return res.status(201).json({
+      success: true,
+      message: "Card created successfully",
+      cardId: result.insertId,
     });
   } catch (error) {
-    console.error("Create card controller error:", error);
+    console.error("Create card error:", error);
     return res.status(500).json({
       success: false,
-      message: "Internal server error",
+      message: "Failed to create card",
     });
   }
 };
 
 // Update card title and description
-export const updateCard = (req, res) => {
+export const updateCard = async (req, res) => {
   try {
     const { id } = req.params;
     const { title, description } = req.body;
@@ -77,103 +55,76 @@ export const updateCard = (req, res) => {
       });
     }
 
-    const query = `
-      UPDATE cards
-      SET title = ?, description = ?
-      WHERE id = ?
-    `;
+    await db.query(
+      `UPDATE cards
+       SET title = ?, description = ?
+       WHERE id = ?`,
+      [title, description || "", id]
+    );
 
-    db.query(query, [title, description || "", id], (err, result) => {
-      if (err) {
-        console.error("Update card error:", err);
-        return res.status(500).json({
-          success: false,
-          message: "Failed to update card",
-        });
-      }
-
-      return res.status(200).json({
-        success: true,
-        message: "Card updated successfully",
-      });
+    return res.status(200).json({
+      success: true,
+      message: "Card updated successfully",
     });
   } catch (error) {
-    console.error("Update card controller error:", error);
+    console.error("Update card error:", error);
     return res.status(500).json({
       success: false,
-      message: "Internal server error",
+      message: "Failed to update card",
     });
   }
 };
 
 // Delete card permanently
-export const deleteCard = (req, res) => {
+export const deleteCard = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const query = `
-      DELETE FROM cards
-      WHERE id = ?
-    `;
+    await db.query(
+      `DELETE FROM cards WHERE id = ?`,
+      [id]
+    );
 
-    db.query(query, [id], (err, result) => {
-      if (err) {
-        console.error("Delete card error:", err);
-        return res.status(500).json({
-          success: false,
-          message: "Failed to delete card",
-        });
-      }
-
-      return res.status(200).json({
-        success: true,
-        message: "Card deleted successfully",
-      });
+    return res.status(200).json({
+      success: true,
+      message: "Card deleted successfully",
     });
   } catch (error) {
-    console.error("Delete card controller error:", error);
+    console.error("Delete card error:", error);
     return res.status(500).json({
       success: false,
-      message: "Internal server error",
+      message: "Failed to delete card",
     });
   }
 };
 
 // Archive card
-export const archiveCard = (req, res) => {
+export const archiveCard = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const query = `
-      UPDATE cards
-      SET is_archived = TRUE
-      WHERE id = ?
-    `;
+    await db.query(
+      `UPDATE cards
+       SET is_archived = TRUE
+       WHERE id = ?`,
+      [id]
+    );
 
-    db.query(query, [id], (err, result) => {
-      if (err) {
-        console.error("Archive card error:", err);
-        return res.status(500).json({
-          success: false,
-          message: "Failed to archive card",
-        });
-      }
-
-      return res.status(200).json({
-        success: true,
-        message: "Card archived successfully",
-      });
+    return res.status(200).json({
+      success: true,
+      message: "Card archived successfully",
     });
   } catch (error) {
-    console.error("Archive card controller error:", error);
+    console.error("Archive card error:", error);
     return res.status(500).json({
       success: false,
-      message: "Internal server error",
+      message: "Failed to archive card",
     });
   }
 };
 
-export const reorderCards = (req, res) => {
+// Reorder cards
+export const reorderCards = async (req, res) => {
   try {
     const { cards } = req.body;
 
@@ -184,40 +135,24 @@ export const reorderCards = (req, res) => {
       });
     }
 
-    const updatePromises = cards.map((card) => {
-      return new Promise((resolve, reject) => {
-        const query = `
-          UPDATE cards
-          SET list_id = ?, position = ?
-          WHERE id = ?
-        `;
+    for (const card of cards) {
+      await db.query(
+        `UPDATE cards
+         SET list_id = ?, position = ?
+         WHERE id = ?`,
+        [card.list_id, card.position, card.id]
+      );
+    }
 
-        db.query(query, [card.list_id, card.position, card.id], (err) => {
-          if (err) return reject(err);
-          resolve();
-        });
-      });
+    return res.status(200).json({
+      success: true,
+      message: "Cards reordered successfully",
     });
-
-    Promise.all(updatePromises)
-      .then(() => {
-        return res.status(200).json({
-          success: true,
-          message: "Cards reordered successfully",
-        });
-      })
-      .catch((err) => {
-        console.error("Reorder cards error:", err);
-        return res.status(500).json({
-          success: false,
-          message: "Failed to reorder cards",
-        });
-      });
   } catch (error) {
-    console.error("Reorder cards controller error:", error);
+    console.error("Reorder cards error:", error);
     return res.status(500).json({
       success: false,
-      message: "Internal server error",
+      message: "Failed to reorder cards",
     });
   }
 };
@@ -228,7 +163,7 @@ export const getCardDetails = async (req, res) => {
     const { id } = req.params;
 
     const [cardRows] = await db.query(
-      "SELECT * FROM cards WHERE id = ?",
+      `SELECT * FROM cards WHERE id = ?`,
       [id]
     );
 
@@ -293,174 +228,129 @@ export const getCardDetails = async (req, res) => {
 };
 
 // Update due date
-export const updateCardDueDate = (req, res) => {
+export const updateCardDueDate = async (req, res) => {
   try {
     const { id } = req.params;
     const { due_date } = req.body;
 
-    const query = `
-      UPDATE cards
-      SET due_date = ?
-      WHERE id = ?
-    `;
+    await db.query(
+      `UPDATE cards
+       SET due_date = ?
+       WHERE id = ?`,
+      [due_date || null, id]
+    );
 
-    db.query(query, [due_date || null, id], (err) => {
-      if (err) {
-        console.error("Update due date error:", err);
-        return res.status(500).json({
-          success: false,
-          message: "Failed to update due date",
-        });
-      }
-
-      return res.status(200).json({
-        success: true,
-        message: "Due date updated successfully",
-      });
+    return res.status(200).json({
+      success: true,
+      message: "Due date updated successfully",
     });
   } catch (error) {
-    console.error("Update due date controller error:", error);
+    console.error("Update due date error:", error);
     return res.status(500).json({
       success: false,
-      message: "Internal server error",
+      message: "Failed to update due date",
     });
   }
 };
 
 // Add label to card
-export const addLabelToCard = (req, res) => {
+export const addLabelToCard = async (req, res) => {
   try {
     const { cardId, labelId } = req.params;
 
-    const query = `
-      INSERT IGNORE INTO card_labels (card_id, label_id)
-      VALUES (?, ?)
-    `;
+    await db.query(
+      `INSERT IGNORE INTO card_labels (card_id, label_id)
+       VALUES (?, ?)`,
+      [cardId, labelId]
+    );
 
-    db.query(query, [cardId, labelId], (err) => {
-      if (err) {
-        console.error("Add label to card error:", err);
-        return res.status(500).json({
-          success: false,
-          message: "Failed to add label to card",
-        });
-      }
-
-      return res.status(200).json({
-        success: true,
-        message: "Label added to card successfully",
-      });
+    return res.status(200).json({
+      success: true,
+      message: "Label added successfully",
     });
   } catch (error) {
-    console.error("Add label to card controller error:", error);
+    console.error("Add label to card error:", error);
     return res.status(500).json({
       success: false,
-      message: "Internal server error",
+      message: "Failed to add label",
     });
   }
 };
 
 // Remove label from card
-export const removeLabelFromCard = (req, res) => {
+export const removeLabelFromCard = async (req, res) => {
   try {
     const { cardId, labelId } = req.params;
 
-    const query = `
-      DELETE FROM card_labels
-      WHERE card_id = ? AND label_id = ?
-    `;
+    await db.query(
+      `DELETE FROM card_labels
+       WHERE card_id = ? AND label_id = ?`,
+      [cardId, labelId]
+    );
 
-    db.query(query, [cardId, labelId], (err) => {
-      if (err) {
-        console.error("Remove label error:", err);
-        return res.status(500).json({
-          success: false,
-          message: "Failed to remove label",
-        });
-      }
-
-      return res.status(200).json({
-        success: true,
-        message: "Label removed successfully",
-      });
+    return res.status(200).json({
+      success: true,
+      message: "Label removed successfully",
     });
   } catch (error) {
-    console.error("Remove label controller error:", error);
+    console.error("Remove label error:", error);
     return res.status(500).json({
       success: false,
-      message: "Internal server error",
+      message: "Failed to remove label",
     });
   }
 };
 
 // Assign member to card
-export const assignMemberToCard = (req, res) => {
+export const assignMemberToCard = async (req, res) => {
   try {
     const { cardId, memberId } = req.params;
 
-    const query = `
-      INSERT IGNORE INTO card_members (card_id, member_id)
-      VALUES (?, ?)
-    `;
+    await db.query(
+      `INSERT IGNORE INTO card_members (card_id, member_id)
+       VALUES (?, ?)`,
+      [cardId, memberId]
+    );
 
-    db.query(query, [cardId, memberId], (err) => {
-      if (err) {
-        console.error("Assign member error:", err);
-        return res.status(500).json({
-          success: false,
-          message: "Failed to assign member",
-        });
-      }
-
-      return res.status(200).json({
-        success: true,
-        message: "Member assigned successfully",
-      });
+    return res.status(200).json({
+      success: true,
+      message: "Member assigned successfully",
     });
   } catch (error) {
-    console.error("Assign member controller error:", error);
+    console.error("Assign member error:", error);
     return res.status(500).json({
       success: false,
-      message: "Internal server error",
+      message: "Failed to assign member",
     });
   }
 };
 
 // Remove member from card
-export const removeMemberFromCard = (req, res) => {
+export const removeMemberFromCard = async (req, res) => {
   try {
     const { cardId, memberId } = req.params;
 
-    const query = `
-      DELETE FROM card_members
-      WHERE card_id = ? AND member_id = ?
-    `;
+    await db.query(
+      `DELETE FROM card_members
+       WHERE card_id = ? AND member_id = ?`,
+      [cardId, memberId]
+    );
 
-    db.query(query, [cardId, memberId], (err) => {
-      if (err) {
-        console.error("Remove member error:", err);
-        return res.status(500).json({
-          success: false,
-          message: "Failed to remove member",
-        });
-      }
-
-      return res.status(200).json({
-        success: true,
-        message: "Member removed successfully",
-      });
+    return res.status(200).json({
+      success: true,
+      message: "Member removed successfully",
     });
   } catch (error) {
-    console.error("Remove member controller error:", error);
+    console.error("Remove member error:", error);
     return res.status(500).json({
       success: false,
-      message: "Internal server error",
+      message: "Failed to remove member",
     });
   }
 };
 
-// Create checklist for a card
-export const createChecklist = (req, res) => {
+// Create checklist
+export const createChecklist = async (req, res) => {
   try {
     const { cardId } = req.params;
     const { title } = req.body;
@@ -472,55 +362,37 @@ export const createChecklist = (req, res) => {
       });
     }
 
-    const positionQuery = `
-      SELECT COALESCE(MAX(position), 0) AS maxPosition
-      FROM checklists
-      WHERE card_id = ?
-    `;
+    const [posRows] = await db.query(
+      `SELECT COALESCE(MAX(position), 0) AS maxPosition
+       FROM checklists
+       WHERE card_id = ?`,
+      [cardId]
+    );
 
-    db.query(positionQuery, [cardId], (posErr, posResults) => {
-      if (posErr) {
-        console.error("Checklist position error:", posErr);
-        return res.status(500).json({
-          success: false,
-          message: "Failed to determine checklist position",
-        });
-      }
+    const nextPosition = posRows[0].maxPosition + 1;
 
-      const nextPosition = posResults[0].maxPosition + 1;
+    const [result] = await db.query(
+      `INSERT INTO checklists (card_id, title, position)
+       VALUES (?, ?, ?)`,
+      [cardId, title, nextPosition]
+    );
 
-      const insertQuery = `
-        INSERT INTO checklists (card_id, title, position)
-        VALUES (?, ?, ?)
-      `;
-
-      db.query(insertQuery, [cardId, title, nextPosition], (err, result) => {
-        if (err) {
-          console.error("Create checklist error:", err);
-          return res.status(500).json({
-            success: false,
-            message: "Failed to create checklist",
-          });
-        }
-
-        return res.status(201).json({
-          success: true,
-          message: "Checklist created successfully",
-          checklistId: result.insertId,
-        });
-      });
+    return res.status(201).json({
+      success: true,
+      message: "Checklist created successfully",
+      checklistId: result.insertId,
     });
   } catch (error) {
-    console.error("Create checklist controller error:", error);
+    console.error("Create checklist error:", error);
     return res.status(500).json({
       success: false,
-      message: "Internal server error",
+      message: "Failed to create checklist",
     });
   }
 };
 
 // Add checklist item
-export const createChecklistItem = (req, res) => {
+export const createChecklistItem = async (req, res) => {
   try {
     const { checklistId } = req.params;
     const { title } = req.body;
@@ -532,84 +404,57 @@ export const createChecklistItem = (req, res) => {
       });
     }
 
-    const positionQuery = `
-      SELECT COALESCE(MAX(position), 0) AS maxPosition
-      FROM checklist_items
-      WHERE checklist_id = ?
-    `;
+    const [posRows] = await db.query(
+      `SELECT COALESCE(MAX(position), 0) AS maxPosition
+       FROM checklist_items
+       WHERE checklist_id = ?`,
+      [checklistId]
+    );
 
-    db.query(positionQuery, [checklistId], (posErr, posResults) => {
-      if (posErr) {
-        console.error("Checklist item position error:", posErr);
-        return res.status(500).json({
-          success: false,
-          message: "Failed to determine checklist item position",
-        });
-      }
+    const nextPosition = posRows[0].maxPosition + 1;
 
-      const nextPosition = posResults[0].maxPosition + 1;
+    const [result] = await db.query(
+      `INSERT INTO checklist_items (checklist_id, title, is_completed, position)
+       VALUES (?, ?, FALSE, ?)`,
+      [checklistId, title, nextPosition]
+    );
 
-      const insertQuery = `
-        INSERT INTO checklist_items (checklist_id, title, is_completed, position)
-        VALUES (?, ?, FALSE, ?)
-      `;
-
-      db.query(insertQuery, [checklistId, title, nextPosition], (err, result) => {
-        if (err) {
-          console.error("Create checklist item error:", err);
-          return res.status(500).json({
-            success: false,
-            message: "Failed to create checklist item",
-          });
-        }
-
-        return res.status(201).json({
-          success: true,
-          message: "Checklist item created successfully",
-          itemId: result.insertId,
-        });
-      });
+    return res.status(201).json({
+      success: true,
+      message: "Checklist item created successfully",
+      itemId: result.insertId,
     });
   } catch (error) {
-    console.error("Create checklist item controller error:", error);
+    console.error("Create checklist item error:", error);
     return res.status(500).json({
       success: false,
-      message: "Internal server error",
+      message: "Failed to create checklist item",
     });
   }
 };
 
-// Toggle checklist item completion
-export const updateChecklistItemStatus = (req, res) => {
+// Toggle checklist item
+export const updateChecklistItemStatus = async (req, res) => {
   try {
     const { itemId } = req.params;
     const { is_completed } = req.body;
 
-    const query = `
-      UPDATE checklist_items
-      SET is_completed = ?
-      WHERE id = ?
-    `;
+    await db.query(
+      `UPDATE checklist_items
+       SET is_completed = ?
+       WHERE id = ?`,
+      [is_completed, itemId]
+    );
 
-    db.query(query, [is_completed, itemId], (err) => {
-      if (err) {
-        console.error("Update checklist item status error:", err);
-        return res.status(500).json({
-          success: false,
-          message: "Failed to update checklist item",
-        });
-      }
-
-      return res.status(200).json({
-        success: true,
-        message: "Checklist item updated successfully",
-      });
+    return res.status(200).json({
+      success: true,
+      message: "Checklist item updated successfully",
     });
   } catch (error) {
-    console.error("Update checklist item controller error:", error);
+    console.error("Update checklist item error:", error);
     return res.status(500).json({
       success: false,
-      message: "Internal server error",
+      message: "Failed to update checklist item",
     });
   }
 };

@@ -1,7 +1,7 @@
 import db from "../config/db.js";
 
-// Create a new list inside a board
-export const createList = (req, res) => {
+// Create list
+export const createList = async (req, res) => {
   try {
     const { boardId } = req.params;
     const { title } = req.body;
@@ -13,55 +13,37 @@ export const createList = (req, res) => {
       });
     }
 
-    const positionQuery = `
-      SELECT COALESCE(MAX(position), 0) AS maxPosition
-      FROM lists
-      WHERE board_id = ?
-    `;
+    const [posRows] = await db.query(
+      `SELECT COALESCE(MAX(position), 0) AS maxPosition
+       FROM lists
+       WHERE board_id = ?`,
+      [boardId]
+    );
 
-    db.query(positionQuery, [boardId], (posErr, posResults) => {
-      if (posErr) {
-        console.error("Error finding list position:", posErr);
-        return res.status(500).json({
-          success: false,
-          message: "Failed to determine list position",
-        });
-      }
+    const nextPosition = posRows[0].maxPosition + 1;
 
-      const nextPosition = posResults[0].maxPosition + 1;
+    const [result] = await db.query(
+      `INSERT INTO lists (board_id, title, position)
+       VALUES (?, ?, ?)`,
+      [boardId, title, nextPosition]
+    );
 
-      const insertQuery = `
-        INSERT INTO lists (board_id, title, position)
-        VALUES (?, ?, ?)
-      `;
-
-      db.query(insertQuery, [boardId, title, nextPosition], (err, result) => {
-        if (err) {
-          console.error("Create list error:", err);
-          return res.status(500).json({
-            success: false,
-            message: "Failed to create list",
-          });
-        }
-
-        return res.status(201).json({
-          success: false,
-          message: "List created successfully",
-          listId: result.insertId,
-        });
-      });
+    return res.status(201).json({
+      success: true,
+      message: "List created successfully",
+      listId: result.insertId,
     });
   } catch (error) {
-    console.error("Create list controller error:", error);
+    console.error("Create list error:", error);
     return res.status(500).json({
       success: false,
-      message: "Internal server error",
+      message: "Failed to create list",
     });
   }
 };
 
-// Update list title
-export const updateList = (req, res) => {
+// Update list
+export const updateList = async (req, res) => {
   try {
     const { id } = req.params;
     const { title } = req.body;
@@ -73,69 +55,51 @@ export const updateList = (req, res) => {
       });
     }
 
-    const query = `
-      UPDATE lists
-      SET title = ?
-      WHERE id = ?
-    `;
+    await db.query(
+      `UPDATE lists
+       SET title = ?
+       WHERE id = ?`,
+      [title, id]
+    );
 
-    db.query(query, [title, id], (err, result) => {
-      if (err) {
-        console.error("Update list error:", err);
-        return res.status(500).json({
-          success: false,
-          message: "Failed to update list",
-        });
-      }
-
-      return res.status(200).json({
-        success: true,
-        message: "List updated successfully",
-      });
+    return res.status(200).json({
+      success: true,
+      message: "List updated successfully",
     });
   } catch (error) {
-    console.error("Update list controller error:", error);
+    console.error("Update list error:", error);
     return res.status(500).json({
       success: false,
-      message: "Internal server error",
+      message: "Failed to update list",
     });
   }
 };
 
 // Delete list
-export const deleteList = (req, res) => {
+export const deleteList = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const query = `
-      DELETE FROM lists
-      WHERE id = ?
-    `;
+    await db.query(
+      `DELETE FROM lists WHERE id = ?`,
+      [id]
+    );
 
-    db.query(query, [id], (err, result) => {
-      if (err) {
-        console.error("Delete list error:", err);
-        return res.status(500).json({
-          success: false,
-          message: "Failed to delete list",
-        });
-      }
-
-      return res.status(200).json({
-        success: true,
-        message: "List deleted successfully",
-      });
+    return res.status(200).json({
+      success: true,
+      message: "List deleted successfully",
     });
   } catch (error) {
-    console.error("Delete list controller error:", error);
+    console.error("Delete list error:", error);
     return res.status(500).json({
       success: false,
-      message: "Internal server error",
+      message: "Failed to delete list",
     });
   }
 };
 
-export const reorderLists = (req, res) => {
+// Reorder lists
+export const reorderLists = async (req, res) => {
   try {
     const { lists } = req.body;
 
@@ -146,40 +110,24 @@ export const reorderLists = (req, res) => {
       });
     }
 
-    const updatePromises = lists.map((list) => {
-      return new Promise((resolve, reject) => {
-        const query = `
-          UPDATE lists
-          SET position = ?
-          WHERE id = ?
-        `;
+    for (const list of lists) {
+      await db.query(
+        `UPDATE lists
+         SET position = ?
+         WHERE id = ?`,
+        [list.position, list.id]
+      );
+    }
 
-        db.query(query, [list.position, list.id], (err) => {
-          if (err) return reject(err);
-          resolve();
-        });
-      });
+    return res.status(200).json({
+      success: true,
+      message: "Lists reordered successfully",
     });
-
-    Promise.all(updatePromises)
-      .then(() => {
-        return res.status(200).json({
-          success: true,
-          message: "Lists reordered successfully",
-        });
-      })
-      .catch((err) => {
-        console.error("Reorder lists error:", err);
-        return res.status(500).json({
-          success: false,
-          message: "Failed to reorder lists",
-        });
-      });
   } catch (error) {
-    console.error("Reorder lists controller error:", error);
+    console.error("Reorder lists error:", error);
     return res.status(500).json({
       success: false,
-      message: "Internal server error",
+      message: "Failed to reorder lists",
     });
   }
 };
