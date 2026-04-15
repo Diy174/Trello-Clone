@@ -1,5 +1,8 @@
 import express from "express";
-import { getAllMembers, getBoardLabels } from "../controllers/metaController.js";
+import {
+  getAllMembers,
+  getBoardLabels,
+} from "../controllers/metaController.js";
 
 const router = express.Router();
 
