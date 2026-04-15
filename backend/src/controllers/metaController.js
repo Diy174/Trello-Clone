@@ -11,7 +11,7 @@ export const getAllMembers = async (req, res) => {
       members,
     });
   } catch (error) {
-    console.error("Get all members error:", error);
+    console.error("Get members controller error:", error);
     return res.status(500).json({
       success: false,
       message: "Failed to fetch members",
@@ -33,7 +33,7 @@ export const getBoardLabels = async (req, res) => {
       labels,
     });
   } catch (error) {
-    console.error("Get board labels error:", error);
+    console.error("Get board labels controller error:", error);
     return res.status(500).json({
       success: false,
       message: "Failed to fetch labels",
