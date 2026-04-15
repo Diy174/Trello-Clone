@@ -9,7 +9,7 @@ const app = express();
 
 const allowedOrigins = [
   "http://localhost:5173",
-  "https://trello-clone-three-rho.vercel.app"
+  process.env.FRONTEND_URL
 ];
 
 app.use(
